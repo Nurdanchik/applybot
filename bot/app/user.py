@@ -1,21 +1,12 @@
 import requests
-
-import asyncio
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message
-from aiogram.filters import CommandStart, Command
-from aiogram import Bot
-from aiohttp import ClientSession, TCPConnector
+from aiogram.filters import CommandStart
 import app.keyboards as kb
-import app.config as config # Убедитесь, что импортировали config
+import app.config as config  # Убедитесь, что импортировали config
 
 TOKEN = config.TOKEN  # Получите токен из config
-
-# UPLOAD_API = "http://127.0.0.1:8000/api/upload_user"
-# GET_API = ""
-upload_api = requests.get('http://127.0.0.1:8000/api/upload_user')
-get_api = requests.get('http://127.0.0.1:8000/api/faces/code')
-get_data = get_api.json()
+UPLOAD_API = 'http://127.0.0.1:8000/api/upload_user'
 
 user = Router()
 
@@ -53,27 +44,16 @@ async def get_or_post_face(message: Message):
     file = await bot.get_file(photo_id)
     file_path = file.file_path
 
-    # Download the photo from Telegram server using aiohttp with SSL verification disabled
-    connector = TCPConnector(ssl=False)
-    async with ClientSession(connector=connector) as session:
-        async with session.get(f'https://api.telegram.org/file/bot{TOKEN}/{file_path}') as response:
-            if response.status == 200:
-                photo_bytes = await response.read()
-            else:
-                await message.reply("Failed to download the image from Telegram.")
-                return
+    # Download the photo from Telegram server
+    file_url = f'https://api.telegram.org/file/bot{TOKEN}/{file_path}'
+    photo_bytes = requests.get(file_url).content
 
     # Send the photo to your FastAPI server
-    async with ClientSession() as session:
-        async with session.post(upload_api, data={'image': ('photo.jpg', photo_bytes, 'image/jpeg')}) as resp:
-            if resp.status == 200:
-                result = await resp.json()
-                # Send the result from FastAPI API back to the user
-                await message.reply(f"Server responded: {result}")
-            else:
-                await message.reply("Failed to upload the image to the server.")
+    files = {'image': ('photo.jpg', photo_bytes, 'image/jpeg')}
+    response = requests.post(UPLOAD_API, files=files)
 
-
-@user.message(Command('get_users'))
-async def get_user(message: Message):
-    await message.answer(text= f'{get_data}')
+    if response.status_code == 200:
+        result = response.json()
+        await message.reply(f"Face registered successfully! ")
+    else:
+        await message.reply("Either face exists in database, or the format of the image you sent os incorrect(mens thta you probably disobeyed the rules).")
